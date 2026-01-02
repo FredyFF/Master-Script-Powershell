@@ -80,5 +80,8 @@ Start-Process msiexec.exe `
 
 Start-Sleep -Seconds 10
 
-Write-Host "[✓] Installation is Done." -ForegroundColor Green
+Write-Host "[✓] Installation is Processing" -ForegroundColor Yellow
+Start-Sleep -Seconds 10
 Write-Host "[✓] Waiting for enrollment..." -ForegroundColor Green
+Start-Sleep -Seconds 200
+Write-Host "[✓] Installation is Done." -ForegroundColor Green
