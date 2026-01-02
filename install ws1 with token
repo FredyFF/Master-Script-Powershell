@@ -1,0 +1,75 @@
+# =========================================
+# Download Workspace ONE Intelligent Hub
+# =========================================
+
+# Serial Number
+$serialNumber = (Get-CimInstance Win32_BIOS).SerialNumber
+
+# Ambil user aktif
+$fullUser = (Get-CimInstance Win32_ComputerSystem).UserName
+
+# Ambil hanya username (tanpa DOMAIN\)
+if ($fullUser -and $fullUser.Contains("\")) {
+    $userName = $fullUser.Split("\")[-1]
+} else {
+    $userName = $fullUser
+}
+
+Write-Host ""
+Write-Host "💻 Masukan Token untuk Device" -ForegroundColor Cyan
+Write-Host "-----------------------------"
+Write-Host "🔢 Serial Number : $serialNumber"
+Write-Host "👤 Active User   : $userName"
+Write-Host ""
+
+# Input Token (TERLIHAT saat diketik)
+$token = Read-Host "🔑 Masukkan Token Enrollment"
+
+if ([string]::IsNullOrWhiteSpace($token)) {
+    Write-Host "❌ Token tidak boleh kosong. Install dibatalkan." -ForegroundColor Red
+    Exit 1
+}
+
+Start-Sleep -Seconds 5
+Write-Host "✅ Process Download Airwatch!" -ForegroundColor Green
+$downloadUrl = "https://packages.omnissa.com/wsone/AirwatchAgent.msi"
+$savePath = "$env:USERPROFILE\Downloads\AirwatchAgent.msi"
+
+Write-Host "⬇️  Download Workspace ONE Intelligent Hub..." -ForegroundColor Cyan
+
+Try {
+    Invoke-WebRequest `
+        -Uri $downloadUrl `
+        -OutFile $savePath `
+        -Headers @{ "User-Agent" = "Mozilla/5.0" }
+
+    Write-Host "✅ Download selesai!" -ForegroundColor Green
+    Write-Host "📁 Lokasi file:" $savePath
+}
+Catch {
+    Write-Host "❌ Gagal download: $($_.Exception.Message)" -ForegroundColor Red
+}
+
+
+
+Write-Host ""
+Write-Host "[...] Installing Workspace ONE" -ForegroundColor Yellow
+
+# Pastikan file MSI ada
+if (-not (Test-Path "C:\Temp\AirwatchAgent.msi")) {
+    Write-Host "❌ File C:\Temp\AirwatchAgent.msi tidak ditemukan!" -ForegroundColor Red
+    Exit 1
+}
+
+# Copy MSI ke Windows Temp
+Copy-Item "C:\Temp\AirwatchAgent.msi" "C:\Windows\Temp\" -Force | Out-Null
+
+# Install Workspace ONE
+Start-Process msiexec.exe `
+    -ArgumentList "/i C:\Windows\Temp\AirwatchAgent.msi /qn ENROLL=Y SERVER=ds510.awmdm.sg LGName=id_seagroup Token=$token ASSIGNTOLOGGEDINUSER=Y DOWNLOADWSBUNDLE=FALSE /LOG $env:TEMP\WorkspaceONE.log" `
+    -Wait
+
+Start-Sleep -Seconds 10
+
+Write-Host "[✓] Installation is Done." -ForegroundColor Green
+Write-Host "[✓] Waiting for enrollment..." -ForegroundColor Green
