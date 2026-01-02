@@ -1,87 +1,96 @@
-
 # =========================================
-# Download Workspace ONE Intelligent Hub
+# Workspace ONE Intelligent Hub Enrollment
 # =========================================
 
-# Serial Number
+Clear-Host
+
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host " Workspace ONE Intelligent Hub - Enrollment " -ForegroundColor Cyan
+Write-Host "============================================`n" -ForegroundColor Cyan
+
+# -----------------------------------------
+# Device & User Info
+# -----------------------------------------
 $serialNumber = (Get-CimInstance Win32_BIOS).SerialNumber
+$fullUser     = (Get-CimInstance Win32_ComputerSystem).UserName
 
-# Ambil user aktif
-$fullUser = (Get-CimInstance Win32_ComputerSystem).UserName
-
-# Ambil hanya username (tanpa DOMAIN\)
 if ($fullUser -and $fullUser.Contains("\")) {
     $userName = $fullUser.Split("\")[-1]
 } else {
     $userName = $fullUser
 }
 
-Write-Host ""
-Write-Host "💻 Masukan Token untuk Device" -ForegroundColor Cyan
-Write-Host "-----------------------------"
 Write-Host "🔢 Serial Number : $serialNumber"
-Write-Host "👤 Active User   : $userName"
-Write-Host ""
+Write-Host "👤 Active User   : $userName`n"
 
-# Input Token (TERLIHAT saat diketik)
-$token = Read-Host "🔑 Masukkan Token Enrollment"
+# -----------------------------------------
+# Input Enrollment Token
+# -----------------------------------------
+$token = Read-Host "🔑 Masukkan Enrollment Token"
 
 if ([string]::IsNullOrWhiteSpace($token)) {
-    Write-Host "❌ Token tidak boleh kosong. Install dibatalkan." -ForegroundColor Red
+    Write-Host "❌ Enrollment Token tidak boleh kosong. Proses dibatalkan." -ForegroundColor Red
     Exit 1
 }
 
+# === SLEEP (TETAP SEPERTI SCRIPT AWAL) ===
 Start-Sleep -Seconds 2
 
-Write-Host "⬇️  Download Workspace ONE Intelligent Hub..." -ForegroundColor Cyan
+# -----------------------------------------
+# Download Workspace ONE Hub
+# -----------------------------------------
 $downloadUrl = "https://packages.omnissa.com/wsone/AirwatchAgent.msi"
-$targetDir  = "C:\Temp"
-$savePath   = "$targetDir\AirwatchAgent.msi"
+$targetDir   = "C:\Temp"
+$msiPath     = "$targetDir\AirwatchAgent.msi"
+$logPath     = "$env:TEMP\WorkspaceONE.log"
 
-# Buat folder C:\Temp jika belum ada
+Write-Host "`n⬇️  Download Workspace ONE Intelligent Hub..." -ForegroundColor Cyan
+
 if (-not (Test-Path $targetDir)) {
     Write-Host "📁 Folder C:\Temp belum ada, membuat folder..." -ForegroundColor Yellow
     New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
 }
 
-Write-Host "⬇️  Download Workspace ONE Intelligent Hub..." -ForegroundColor Cyan
-
 Try {
     Invoke-WebRequest `
         -Uri $downloadUrl `
-        -OutFile $savePath `
-        -Headers @{ "User-Agent" = "Mozilla/5.0" }
+        -OutFile $msiPath `
+        -Headers @{ "User-Agent" = "Mozilla/5.0" } `
+        -UseBasicParsing
 
     Write-Host "✅ Download selesai!" -ForegroundColor Green
-    Write-Host "📁 File tersimpan di:" $savePath
 }
 Catch {
     Write-Host "❌ Gagal download: $($_.Exception.Message)" -ForegroundColor Red
-}
-
-
-
-Write-Host ""
-Write-Host "[...] Installing Workspace ONE" -ForegroundColor Yellow
-
-# Pastikan file MSI ada
-if (-not (Test-Path "C:\Temp\AirwatchAgent.msi")) {
-    Write-Host "❌ File C:\Temp\AirwatchAgent.msi tidak ditemukan!" -ForegroundColor Red
     Exit 1
 }
 
-# Copy MSI ke Windows Temp
-Copy-Item "C:\Temp\AirwatchAgent.msi" "C:\Windows\Temp\" -Force | Out-Null
+# -----------------------------------------
+# Install Workspace ONE (Silent + Token Benar)
+# -----------------------------------------
+Write-Host "`n⚙️  Installing Workspace ONE..." -ForegroundColor Yellow
 
-# Install Workspace ONE
+if (-not (Test-Path $msiPath)) {
+    Write-Host "❌ File MSI tidak ditemukan!" -ForegroundColor Red
+    Exit 1
+}
+
+Copy-Item $msiPath "C:\Windows\Temp\" -Force | Out-Null
+
 Start-Process msiexec.exe `
-    -ArgumentList "/i C:\Windows\Temp\AirwatchAgent.msi /qn ENROLL=Y SERVER=ds510.awmdm.sg LGName=id_seagroup Token=$token ASSIGNTOLOGGEDINUSER=Y DOWNLOADWSBUNDLE=FALSE /LOG $env:TEMP\WorkspaceONE.log" `
+    -ArgumentList "/i C:\Windows\Temp\AirwatchAgent.msi /qn ENROLL=Y SERVER=ds510.awmdm.sg LGName=id_seagroup ENROLLMENTTOKEN=$token ASSIGNTOLOGGEDINUSER=Y DOWNLOADWSBUNDLE=FALSE /LOG $logPath" `
     -Wait
 
+# === SLEEP (TETAP) ===
 Start-Sleep -Seconds 10
-
 Write-Host "[✓] Installation is Processing" -ForegroundColor Yellow
+
+# === SLEEP (TETAP) ===
 Start-Sleep -Seconds 10
 Write-Host "[✓] Waiting for enrollment..." -ForegroundColor Green
+
+# === SLEEP (TETAP) ===
 Start-Sleep -Seconds 200
+
 Write-Host "[✓] Installation is Done." -ForegroundColor Green
+Write-Host "📄 Log File : $logPath" -ForegroundColor Cyan
