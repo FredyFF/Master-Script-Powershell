@@ -1,96 +1,84 @@
 # =========================================
-# Workspace ONE Intelligent Hub Enrollment
+# Workspace ONE Install + Enrollment Logging
 # =========================================
 
-Clear-Host
-
-Write-Host "============================================" -ForegroundColor Cyan
-Write-Host " Workspace ONE Intelligent Hub - Enrollment " -ForegroundColor Cyan
-Write-Host "============================================`n" -ForegroundColor Cyan
-
-# -----------------------------------------
-# Device & User Info
-# -----------------------------------------
+# === Device Info ===
 $serialNumber = (Get-CimInstance Win32_BIOS).SerialNumber
-$fullUser     = (Get-CimInstance Win32_ComputerSystem).UserName
+$fullUser = (Get-CimInstance Win32_ComputerSystem).UserName
+$userName = if ($fullUser -and $fullUser.Contains("\")) { $fullUser.Split("\")[-1] } else { $fullUser }
 
-if ($fullUser -and $fullUser.Contains("\")) {
-    $userName = $fullUser.Split("\")[-1]
-} else {
-    $userName = $fullUser
-}
+# === Desktop log file ===
+$desktopPath = [Environment]::GetFolderPath("Desktop")
+$errorLogTxt = Join-Path $desktopPath "WorkspaceONE_Enroll_Error.txt"
+$msiLog     = "$env:TEMP\WorkspaceONE.log"
 
+Write-Host ""
+Write-Host "💻 Masukan Token untuk Device" -ForegroundColor Cyan
+Write-Host "-----------------------------"
 Write-Host "🔢 Serial Number : $serialNumber"
-Write-Host "👤 Active User   : $userName`n"
+Write-Host "👤 Active User   : $userName"
+Write-Host ""
 
-# -----------------------------------------
-# Input Enrollment Token
-# -----------------------------------------
-$token = Read-Host "🔑 Masukkan Enrollment Token"
-
+# === Token Input (visible) ===
+$token = Read-Host "🔑 Masukkan Token Enrollment"
 if ([string]::IsNullOrWhiteSpace($token)) {
-    Write-Host "❌ Enrollment Token tidak boleh kosong. Proses dibatalkan." -ForegroundColor Red
+    Write-Host "❌ Token tidak boleh kosong." -ForegroundColor Red
     Exit 1
 }
 
-# === SLEEP (TETAP SEPERTI SCRIPT AWAL) ===
-Start-Sleep -Seconds 2
-
-# -----------------------------------------
-# Download Workspace ONE Hub
-# -----------------------------------------
+# === Download MSI ===
 $downloadUrl = "https://packages.omnissa.com/wsone/AirwatchAgent.msi"
-$targetDir   = "C:\Temp"
-$msiPath     = "$targetDir\AirwatchAgent.msi"
-$logPath     = "$env:TEMP\WorkspaceONE.log"
-
-Write-Host "`n⬇️  Download Workspace ONE Intelligent Hub..." -ForegroundColor Cyan
+$targetDir = "C:\Temp"
+$msiPath   = "$targetDir\AirwatchAgent.msi"
 
 if (-not (Test-Path $targetDir)) {
-    Write-Host "📁 Folder C:\Temp belum ada, membuat folder..." -ForegroundColor Yellow
     New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
 }
 
-Try {
-    Invoke-WebRequest `
-        -Uri $downloadUrl `
-        -OutFile $msiPath `
-        -Headers @{ "User-Agent" = "Mozilla/5.0" } `
-        -UseBasicParsing
+Write-Host "⬇️  Download Workspace ONE..." -ForegroundColor Cyan
+Invoke-WebRequest -Uri $downloadUrl -OutFile $msiPath -Headers @{ "User-Agent"="Mozilla/5.0" }
 
-    Write-Host "✅ Download selesai!" -ForegroundColor Green
-}
-Catch {
-    Write-Host "❌ Gagal download: $($_.Exception.Message)" -ForegroundColor Red
+# === Install MSI ===
+Write-Host "[...] Installing Workspace ONE" -ForegroundColor Yellow
+
+Copy-Item $msiPath "C:\Windows\Temp\" -Force
+$msiArgs = "/i C:\Windows\Temp\AirwatchAgent.msi /qn ENROLL=Y SERVER=ds510.awmdm.sg LGName=id_seagroup Token=$token ASSIGNTOLOGGEDINUSER=Y DOWNLOADWSBUNDLE=FALSE /LOG `"$msiLog`""
+
+$process = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
+$exitCode = $process.ExitCode
+
+# === Analyze Result ===
+if ($exitCode -ne 0) {
+
+    Write-Host "❌ Installation / Enrollment FAILED (ExitCode: $exitCode)" -ForegroundColor Red
+
+    # Ambil baris error dari log MSI
+    $errorLines = Select-String -Path $msiLog -Pattern "error|fail|return value 3" -CaseSensitive:$false
+
+    $content = @()
+    $content += "Workspace ONE Enrollment FAILED"
+    $content += "=============================="
+    $content += "Serial Number : $serialNumber"
+    $content += "User          : $userName"
+    $content += "Exit Code     : $exitCode"
+    $content += "Log File      : $msiLog"
+    $content += ""
+    $content += "Error Details:"
+    $content += "--------------"
+
+    if ($errorLines) {
+        $content += $errorLines.Line
+    } else {
+        $content += "Tidak ditemukan error spesifik di log."
+    }
+
+    $content | Out-File -FilePath $errorLogTxt -Encoding UTF8
+
+    Write-Host "📄 Error log dibuat di Desktop:" -ForegroundColor Yellow
+    Write-Host "   $errorLogTxt"
     Exit 1
 }
 
-# -----------------------------------------
-# Install Workspace ONE (Silent + Token Benar)
-# -----------------------------------------
-Write-Host "`n⚙️  Installing Workspace ONE..." -ForegroundColor Yellow
-
-if (-not (Test-Path $msiPath)) {
-    Write-Host "❌ File MSI tidak ditemukan!" -ForegroundColor Red
-    Exit 1
-}
-
-Copy-Item $msiPath "C:\Windows\Temp\" -Force | Out-Null
-
-Start-Process msiexec.exe `
-    -ArgumentList "/i C:\Windows\Temp\AirwatchAgent.msi /qn ENROLL=Y SERVER=ds510.awmdm.sg LGName=id_seagroup ENROLLMENTTOKEN=$token ASSIGNTOLOGGEDINUSER=Y DOWNLOADWSBUNDLE=FALSE /LOG $logPath" `
-    -Wait
-
-# === SLEEP (TETAP) ===
-Start-Sleep -Seconds 10
-Write-Host "[✓] Installation is Processing" -ForegroundColor Yellow
-
-# === SLEEP (TETAP) ===
-Start-Sleep -Seconds 10
+# === Success ===
+Write-Host "[✓] Installation completed successfully." -ForegroundColor Green
 Write-Host "[✓] Waiting for enrollment..." -ForegroundColor Green
-
-# === SLEEP (TETAP) ===
-Start-Sleep -Seconds 200
-
-Write-Host "[✓] Installation is Done." -ForegroundColor Green
-Write-Host "📄 Log File : $logPath" -ForegroundColor Cyan
