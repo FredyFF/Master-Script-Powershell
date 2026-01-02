@@ -1,3 +1,4 @@
+
 # =========================================
 # Download Workspace ONE Intelligent Hub
 # =========================================
@@ -30,10 +31,18 @@ if ([string]::IsNullOrWhiteSpace($token)) {
     Exit 1
 }
 
-Start-Sleep -Seconds 5
-Write-Host "✅ Process Download Airwatch!" -ForegroundColor Green
+Start-Sleep -Seconds 2
+
+Write-Host "⬇️  Download Workspace ONE Intelligent Hub..." -ForegroundColor Cyan
 $downloadUrl = "https://packages.omnissa.com/wsone/AirwatchAgent.msi"
-$savePath = "$env:USERPROFILE\Downloads\AirwatchAgent.msi"
+$targetDir  = "C:\Temp"
+$savePath   = "$targetDir\AirwatchAgent.msi"
+
+# Buat folder C:\Temp jika belum ada
+if (-not (Test-Path $targetDir)) {
+    Write-Host "📁 Folder C:\Temp belum ada, membuat folder..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+}
 
 Write-Host "⬇️  Download Workspace ONE Intelligent Hub..." -ForegroundColor Cyan
 
@@ -44,7 +53,7 @@ Try {
         -Headers @{ "User-Agent" = "Mozilla/5.0" }
 
     Write-Host "✅ Download selesai!" -ForegroundColor Green
-    Write-Host "📁 Lokasi file:" $savePath
+    Write-Host "📁 File tersimpan di:" $savePath
 }
 Catch {
     Write-Host "❌ Gagal download: $($_.Exception.Message)" -ForegroundColor Red
